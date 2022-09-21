@@ -7,3 +7,8 @@ class Movie(models.Model):
     producer = models.CharField(max_length=50, blank=False, default='')
     rating = models.FloatField(blank=False)
     published = models.BooleanField(default=False)
+
+
+class Authorization(models.Model):
+    email = models.CharField(max_length=100, blank=False)
+    password = models.CharField(max_length=100, blank=False)

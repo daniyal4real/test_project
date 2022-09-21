@@ -4,8 +4,11 @@ from apps.kinopark.models import Movie
 from django.http import JsonResponse
 from rest_framework.parsers import JSONParser
 from rest_framework.decorators import api_view
-from apps.kinopark.serializers import MovieSerializer
+from apps.kinopark.serializers import *
 import pickle
+import re
+
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def movies_list(request):
@@ -35,6 +38,22 @@ def movies_list(request):
         counter = Movie.objects.all().delete()
         return JsonResponse({'message': 'deleted'.format(counter[0])})
 
+@api_view(['POST'])
+def sign_up(request):
+    registration_data = JSONParser().parse(request)
+    registration_serializer = RegistrationSerializer(data=registration_data)
+    print(registration_data)
+    pattern = "[a-zA-Z0-9]+@[a-zA-Z]+\.(com|edu|net)"
+    pswd = registration_data.get("email")
+    if re.search(pattern, pswd):
+        if registration_serializer.is_valid():
+            registration_serializer.save()
+            return JsonResponse({"message": "successfully registered"}, status=status.HTTP_201_CREATED)
+        else:
+            print("Email is invalid")
+            return JsonResponse({"message": "Wrong email or password"})
+
+    return JsonResponse({"message": "Email or password is incorrect"})
 
 @api_view(['GET', 'PUT', 'DELETE'])
 def movie_by_id(request, pk):
