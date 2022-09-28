@@ -1,13 +1,44 @@
 from django.shortcuts import render
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle
 from rest_framework import status
 from apps.kinopark.models import Movie
 from django.http import JsonResponse
 from rest_framework.parsers import JSONParser
 from rest_framework.decorators import api_view
 from apps.kinopark.serializers import *
+from rest_framework.views import APIView
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.response import Response
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import letter
+from django.http import FileResponse
+import io
+import jwt, datetime
 import pickle
 import re
 
+
+# def gen_pdf(request):
+#     buf = io.BytesIO()
+#     canva = canvas.Canvas(buf, pagesize=letter)
+#
+#     text = canva.beginText()
+#
+#     text.setFont("Helvetica", 17)
+#     lines = ['the list of text', 'the list of text', 'the list of text']
+#     for line in lines:
+#         text.textLine(line)
+#         canva.drawString(100, 750, lines)
+
+
+#
+# canva.showPage()
+# canva.save()
+# buf.seek(0)
+#
+# return FileResponse(buf, as_attachment=True, filename="lines.pdf")
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -25,7 +56,8 @@ def movies_list(request):
             movies = movies.filter(movie__icontains=title)
 
         movies_serializer = MovieSerializer(movies, many=True)
-        return JsonResponse(movies_serializer.data, safe=False)
+        # return JsonResponse(movies_serializer.data, safe=False)
+        return render(request, 'index.html', {'movies': movies_serializer.data, 'name': 'test'})
     elif request.method == 'POST':
         movie_data = JSONParser().parse(request)
         movie_serializer = MovieSerializer(data=movie_data)
@@ -38,22 +70,57 @@ def movies_list(request):
         counter = Movie.objects.all().delete()
         return JsonResponse({'message': 'deleted'.format(counter[0])})
 
-@api_view(['POST'])
-def sign_up(request):
-    registration_data = JSONParser().parse(request)
-    registration_serializer = RegistrationSerializer(data=registration_data)
-    print(registration_data)
-    pattern = "[a-zA-Z0-9]+@[a-zA-Z]+\.(com|edu|net)"
-    pswd = registration_data.get("email")
-    if re.search(pattern, pswd):
-        if registration_serializer.is_valid():
-            registration_serializer.save()
-            return JsonResponse({"message": "successfully registered"}, status=status.HTTP_201_CREATED)
-        else:
-            print("Email is invalid")
-            return JsonResponse({"message": "Wrong email or password"})
 
-    return JsonResponse({"message": "Email or password is incorrect"})
+@api_view(['POST'])
+def create_order(request):
+    token = request.COOKIES.get('jwt')
+    if not token:
+        raise AuthenticationFailed("Не авторизованый пользователь")
+
+    payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+
+    if request.method == 'POST':
+        user = User.objects.filter(id=payload['id'])
+        user.id = payload['id']
+        order_data = JSONParser().parse(request)
+        order_serializer = OrderSerializer(data=order_data)
+
+        order_data['user'] = user.id
+
+        if order_serializer.is_valid():
+            order_serializer.save()
+            return JsonResponse(order_serializer.data, status=status.HTTP_201_CREATED)
+        return JsonResponse(order_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'POST'])
+def order(request, pk):
+    if request.method == 'GET':
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return JsonResponse({"message": "Order does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+        order_serializer = OrderSerializer(order)
+        return JsonResponse(order_serializer.data)
+
+
+# @api_view(['POST'])
+# def sign_up(request):
+#     registration_data = JSONParser().parse(request)
+#     registration_serializer = RegistrationSerializer(data=registration_data)
+#     print(registration_data)
+#     pattern = "[a-zA-Z0-9]+@[a-zA-Z]+\.(com|edu|net)"
+#     pswd = registration_data.get("email")
+#     if re.search(pattern, pswd):
+#         if registration_serializer.is_valid():
+#             registration_serializer.save()
+#             return JsonResponse({"message": "successfully registered"}, status=status.HTTP_201_CREATED)
+#         else:
+#             print("Email is invalid")
+#             return JsonResponse({"message": "Wrong email or password"})
+#
+#     return JsonResponse({"message": "Email or password is incorrect"})
 
 @api_view(['GET', 'PUT', 'DELETE'])
 def movie_by_id(request, pk):
@@ -85,3 +152,87 @@ def unpublished_movies(request):
     if request.method == 'GET':
         movies_serializer = MovieSerializer(movies, many=True)
         return JsonResponse(movies_serializer.data, safe=False)
+
+
+class RegisterView(APIView):
+
+    def post(self, request):
+        email = request.data['email']
+        serializer = UserSerializer(data=request.data)
+        pattern = "[a-zA-Z0-9]+@[a-zA-Z]+\.(com|edu|net)"
+        if re.search(pattern, email):
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            print("OK")
+            return Response(serializer.data)
+        else:
+            raise AuthenticationFailed("Error email")
+
+
+class LoginView(APIView):
+    def post(self, request):
+        email = request.data['email']
+        password = request.data['password']
+
+        user = User.objects.filter(email=email).first()
+
+        if user is None:
+            raise AuthenticationFailed("Пользователь не найден")
+
+        if not user.check_password(password):
+            raise AuthenticationFailed("Не правильный пароль")
+
+        user.is_active = True
+        user.last_login = datetime.datetime.utcnow()
+        user.save()
+        payload = {
+            'id': user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=60),
+            'iat': datetime.datetime.utcnow()
+        }
+
+        token = jwt.encode(payload, 'secret', algorithm='HS256')
+
+        response = Response()
+        response.set_cookie(key='jwt', value=token, httponly=True)
+        response.data = {
+            'jwt': token
+        }
+        return response
+
+
+def get_login(request):
+    return render(request, 'login.html')
+
+
+class UserView(APIView):
+    def get(self, request):
+        token = request.COOKIES.get('jwt')
+
+        if not token:
+            raise AuthenticationFailed('Пользователь не авторизован')
+        try:
+            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed('Пользователь не авторизован')
+
+        user = User.objects.filter(id=payload['id']).first()
+
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        token = request.COOKIES.get('jwt')
+        payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+        user = User.objects.filter(id=payload['id']).first()
+        user.is_active = False
+        user.save()
+        response = Response()
+        response.delete_cookie('jwt')
+        response.data = {
+            'message': 'вышли успешно'
+        }
+        return response
