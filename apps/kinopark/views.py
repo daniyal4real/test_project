@@ -14,11 +14,19 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import letter
 from django.http import FileResponse
+from django.core.mail import send_mail
+from django.shortcuts import redirect
+from django.template.loader import render_to_string
+
+from .models import ContactForm
 import io
 import jwt, datetime
 import pickle
+import logging
 import re
 
+
+logger = logging.getLogger(__name__)
 
 # def gen_pdf(request):
 #     buf = io.BytesIO()
@@ -39,36 +47,64 @@ import re
 # buf.seek(0)
 #
 # return FileResponse(buf, as_attachment=True, filename="lines.pdf")
+@api_view(['GET'])
+def seans_list(request):
+    if request.method == 'GET':
+        seansy = Seans.objects.all()
+        seans_serializer = SeansSerializer(seansy, many=True)
+        return JsonResponse(seans_serializer.data, safe=False)
+
+
+
+@api_view(['GET'])
+def kinozal_by_id(request, id):
+    try:
+        kinozal = Kinozal.objects.get(id=id)
+    except Kinozal.DoesNotExist:
+        return JsonResponse({"Message": "Kinozal does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        kinozal_serializer = KinozalSerializer(kinozal)
+        return JsonResponse(kinozal_serializer.data)
+
+
+@api_view(['GET'])
+def seans_by_id(request, id):
+    try:
+        seans = Seans.objects.get(id=id)
+    except Seans.DoesNotExist:
+        return JsonResponse({"Message": "Seans does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        seans_serializer = SeansSerializer(seans)
+        return JsonResponse(seans_serializer.data)
+
 
 
 @api_view(['GET', 'POST', 'DELETE'])
 def movies_list(request):
     if request.method == 'GET':
         movies = Movie.objects.all()
-
         movies.query = pickle.loads(pickle.dumps(movies.query))
-        print(movies.query)
-        movies.reverse()
-        print(movies.reverse())
-
         title = request.GET.get('title', None)
         if title is not None:
             movies = movies.filter(movie__icontains=title)
-
         movies_serializer = MovieSerializer(movies, many=True)
-        # return JsonResponse(movies_serializer.data, safe=False)
-        return render(request, 'index.html', {'movies': movies_serializer.data, 'name': 'test'})
+        return JsonResponse(movies_serializer.data, safe=False)
+
     elif request.method == 'POST':
         movie_data = JSONParser().parse(request)
         movie_serializer = MovieSerializer(data=movie_data)
         if movie_serializer.is_valid():
             movie_serializer.save()
             return JsonResponse(movie_serializer.data, status=status.HTTP_201_CREATED)
+        logging.critical(status)
         return JsonResponse(movie_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'DELETE':
         counter = Movie.objects.all().delete()
         return JsonResponse({'message': 'deleted'.format(counter[0])})
+
 
 
 @api_view(['POST'])
@@ -202,6 +238,9 @@ class LoginView(APIView):
 
 
 def get_login(request):
+    # logging.basicConfig(filename='info.log', filemode='w', format='%(asctime)s - %(name)s % - %(level)s - %(message)s')
+    # logging.warning('TEST')
+    logger.warning('test')
     return render(request, 'login.html')
 
 
@@ -236,3 +275,35 @@ class LogoutView(APIView):
             'message': 'вышли успешно'
         }
         return response
+
+
+def contact(request):
+    if request.method == 'POST':
+        form = ContactForm(request.POST)
+
+        if form.is_valid():
+            name = form.cleaned_data['name']
+            email = form.cleaned_data['email']
+            content = form.cleaned_data['content']
+
+            html = render_to_string('emails/contactform.html', {
+                'name': name,
+                'email': email,
+                'content': content
+            })
+
+            send_mail('This is contact form subject',
+                      'This is the message',
+                      'd.ganiuly@bk.ru',
+                      ['daniyal.ganiuly@gmail.com', 'd.ganiuly@bk.ru'],
+                      html_message=html)
+
+            return JsonResponse({"message": "success"})
+
+    else:
+        form = ContactForm()
+
+    return render(request, 'index.html', {
+        'form': form
+    })
+

@@ -2,7 +2,21 @@ from rest_framework import serializers
 from apps.kinopark.models import *
 
 
+
+class SeansSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Seans
+        fields = "__all__"
+        depth = 1
+
+
+
+
+
 class MovieSerializer(serializers.ModelSerializer):
+    movie_seansy = SeansSerializer(many=True)
+
     class Meta:
         model = Movie
         fields = (
@@ -11,8 +25,11 @@ class MovieSerializer(serializers.ModelSerializer):
             'description',
             'producer',
             'rating',
-            'published'
+            'published',
+            'image',
+            'movie_seansy'
         )
+
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -41,6 +58,3 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = "__all__"
-
-
-
