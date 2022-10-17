@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 from rest_framework import status
@@ -25,8 +25,8 @@ import pickle
 import logging
 import re
 
-
 logger = logging.getLogger(__name__)
+
 
 # def gen_pdf(request):
 #     buf = io.BytesIO()
@@ -55,17 +55,17 @@ def seans_list(request):
         return JsonResponse(seans_serializer.data, safe=False)
 
 
-
-@api_view(['GET'])
-def kinozal_by_id(request, id):
-    try:
-        kinozal = Kinozal.objects.get(id=id)
-    except Kinozal.DoesNotExist:
-        return JsonResponse({"Message": "Kinozal does not exist"}, status=status.HTTP_404_NOT_FOUND)
-
-    if request.method == 'GET':
-        kinozal_serializer = KinozalSerializer(kinozal)
-        return JsonResponse(kinozal_serializer.data)
+#
+# @api_view(['GET'])
+# def kinozal_by_id(request, id):
+#     try:
+#         kinozal = Kinozal.objects.get(id=id)
+#     except Kinozal.DoesNotExist:
+#         return JsonResponse({"Message": "Kinozal does not exist"}, status=status.HTTP_404_NOT_FOUND)
+#
+#     if request.method == 'GET':
+#         kinozal_serializer = KinozalSerializer(kinozal)
+#         return JsonResponse(kinozal_serializer.data)
 
 
 @api_view(['GET'])
@@ -78,7 +78,6 @@ def seans_by_id(request, id):
     if request.method == 'GET':
         seans_serializer = SeansSerializer(seans)
         return JsonResponse(seans_serializer.data)
-
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -106,7 +105,6 @@ def movies_list(request):
         return JsonResponse({'message': 'deleted'.format(counter[0])})
 
 
-
 @api_view(['POST'])
 def create_order(request):
     token = request.COOKIES.get('jwt')
@@ -114,31 +112,28 @@ def create_order(request):
         raise AuthenticationFailed("Не авторизованый пользователь")
 
     payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+    user = get_object_or_404(User, pk=payload['id'])
 
-    if request.method == 'POST':
-        user = User.objects.filter(id=payload['id'])
-        user.id = payload['id']
-        order_data = JSONParser().parse(request)
-        order_serializer = OrderSerializer(data=order_data)
+    order_data = JSONParser().parse(request)
+    order_data.update(
+        {'user': user.id}
+    )
+    order_serializer = CreateOrderSerializer(data=order_data)
 
-        order_data['user'] = user.id
-
-        if order_serializer.is_valid():
-            order_serializer.save()
-            return JsonResponse(order_serializer.data, status=status.HTTP_201_CREATED)
-        return JsonResponse(order_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if order_serializer.is_valid(raise_exception=True):
+        order_serializer.save()
+        return JsonResponse(order_serializer.data, status=status.HTTP_201_CREATED)
+    return JsonResponse(order_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['GET', 'POST'])
-def order(request, pk):
-    if request.method == 'GET':
-        try:
-            order = Order.objects.get(pk=pk)
-        except Order.DoesNotExist:
-            return JsonResponse({"message": "Order does not exist"}, status=status.HTTP_404_NOT_FOUND)
-
-        order_serializer = OrderSerializer(order)
-        return JsonResponse(order_serializer.data)
+@api_view(['GET'])
+def get_order_by_id(request, pk):
+    try:
+        order = Order.objects.get(pk=pk)
+    except Order.DoesNotExist:
+        return JsonResponse({"message": "Order does not exist"}, status=status.HTTP_404_NOT_FOUND)
+    order_serializer = OrderSerializer(order)
+    return JsonResponse(order_serializer.data)
 
 
 # @api_view(['POST'])
@@ -307,3 +302,32 @@ def contact(request):
         'form': form
     })
 
+
+class SeansView(APIView):
+
+    def get(self, request, *args, **kwargs):
+        seans = get_object_or_404(Seans, pk=self.kwargs.get('id'))
+        seans_serializer = SeansSerializer(seans)
+        return Response(seans_serializer.data)
+
+
+class TicketView(APIView):
+    def get(self, request, *args, **kwargs):
+        ticket = get_object_or_404(Ticket, pk=self.kwargs.get('id'))
+        ticket_serializer = TicketSerializer(ticket)
+        return Response(ticket_serializer.data)
+
+    def post(self, request):
+        ticket_data = JSONParser().parse(request)
+        ticket_serializer = CreateTicketSerializer(data=ticket_data)
+        if ticket_serializer.is_valid():
+            ticket_serializer.save()
+            return Response(ticket_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class OrderView(APIView):
+    def get(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=self.kwargs.get('id'))
+        order_serializer = OrderSerializer(order)
+        return Response(order_serializer.data)

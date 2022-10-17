@@ -80,7 +80,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'handlers': {
         'file': {
-            'level': 'CRITICAL',
+            'level': 'INFO',
             'class': 'logging.FileHandler',
             'filename': 'C:\\Users\\GaniulyD\\PycharmProjects\\cinema\\info.log',
             'formatter': 'simple',
@@ -89,7 +89,7 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['file'],
-            'level': 'CRITICAL',
+            'level': 'INFO',
             'propagate': True,
         },
     },

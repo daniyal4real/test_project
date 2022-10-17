@@ -16,8 +16,6 @@ class Movie(models.Model):
         return self.seans_set.all()
 
 
-
-
 class Seans(models.Model):
     price = models.BigIntegerField(null=False)
     time = models.TimeField()
@@ -25,17 +23,16 @@ class Seans(models.Model):
     movie = models.ForeignKey('Movie', on_delete=models.CASCADE)
     kinozal_id = models.IntegerField()
 
-    @property
-    def seans_seat(self):
-        return self.seat_set.all()
-
 
 class Seat(models.Model):
     seat_number = models.IntegerField()
     available = models.BooleanField()
-    seans = models.ForeignKey(Seans, on_delete=models.PROTECT)
+    seans = models.ForeignKey(Seans, on_delete=models.CASCADE)
 
 
+class Ticket(models.Model):
+    seans = models.ForeignKey('Seans', on_delete=models.CASCADE)
+    movie = models.ForeignKey('Movie', on_delete=models.CASCADE)
 
 
 class User(AbstractUser):
@@ -53,7 +50,7 @@ class User(AbstractUser):
 class Order(models.Model):
     price = models.BigIntegerField(blank=False)
     time = models.DateTimeField(auto_now=True)
-    movie = models.ForeignKey('Movie', on_delete=models.PROTECT)
+    ticket = models.ForeignKey('Ticket', on_delete=models.PROTECT)
     user = models.ForeignKey('User', on_delete=models.PROTECT)
 
 
